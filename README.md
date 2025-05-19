@@ -235,6 +235,75 @@ Recommended role distribution based on player count:
    - Report any bugs or connection issues promptly
    - Don't exploit technical glitches
 
+## Building and Running
+
+### Option 1: Native Build
+
+#### Prerequisites
+- GCC compiler
+- Make
+- POSIX-compliant operating system
+
+#### Building
+```bash
+# Build both server and client
+make all
+
+# Build only server
+make server
+
+# Build only client
+make client
+```
+
+The executables will be created in:
+- Server: `build/server/werewolf_server`
+- Client: `build/client/werewolf_client`
+
+#### Running
+```bash
+# Run the server
+./build/server/werewolf_server
+
+# Run the client
+./build/client/werewolf_client
+```
+
+### Option 2: Using Docker
+
+#### Building Docker Images
+```bash
+# Build all images
+docker build --target builder -t werewolf-builder .
+docker build --target client-runtime -t werewolf-client .
+docker build --target server-runtime -t werewolf-server .
+```
+
+#### Running with Docker
+```bash
+# Run the server
+docker run -p 8080:8080 werewolf-server
+
+# Run the client
+docker run -it --rm werewolf-client
+```
+
+### Option 3: Standalone Client Distribution
+
+For Linux users who don't want to build from source, you can distribute the client executable directly. The client is statically linked with minimal dependencies:
+
+1. Download the client executable
+2. Make it executable:
+   ```bash
+   chmod +x werewolf_client
+   ```
+3. Run it:
+   ```bash
+   ./werewolf_client
+   ```
+
+Note: The client requires only libc6 to run, which is available on all modern Linux distributions.
+
 ---
 
 This Werewolf implementation aims to capture the essence of the traditional party game while leveraging networking technology to enable remote play. The social deduction, strategy, and deception elements remain central to the experience, with the added convenience of online connectivity.
