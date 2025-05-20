@@ -38,6 +38,12 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
     }
 
     buffer[valread] = '\0';
+
+    // Ignore empty messages
+    if (strcmp(buffer, "") == 0 || strcmp(buffer, "\n") == 0) {
+        return;
+    }
+    
     log(INFO, "Received from client %d: %s", client_socket, buffer);
     
     // Echo back to client
@@ -65,6 +71,15 @@ static void handle_new_connection(int client_socket, game_manager_t game_manager
         return;
     }
 
+    if (game_manager_get_phase(game_manager) != GAME_STATE_LOBBY) {
+        log(INFO, "Game is not in lobby phase, rejecting connection");
+        char message[BUFFER_SIZE];
+        snprintf(message, BUFFER_SIZE, "The game has already started, come back later!\n");
+        send(client_socket, message, strlen(message), 0);
+        close(client_socket);
+        return;
+    }
+
     if (game_manager_add_player(game_manager, client_socket) == 0) {
         *client_fd_list = add_client_fd(*client_fd_list, client_socket);
         log(INFO, "New client added to list, total clients: %d", 
@@ -83,8 +98,8 @@ static void handle_new_connection(int client_socket, game_manager_t game_manager
                 player_roles[i] = game_manager_get_player_role(game_manager, player_sockets[i]);
             }
             
-            send_message_to_all_players(player_sockets, player_count, "Game started!");
-            send_message_role_assignment(player_sockets, player_count, player_roles);
+            send_message_to_all_players(player_sockets, player_count, "The game has started!\n");
+            send_message_role_assignment(player_sockets, player_count, player_roles, game_manager_get_werewolf_count(game_manager));
             
             free(player_sockets);
             free(player_roles);
