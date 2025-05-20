@@ -14,7 +14,7 @@
 #include "defs.h"
 #include "game_manager.h"
 #include "game_config.h"
-
+#include "game_util.h"
 #define DEFAULT_PORT "8080"
 #define DEFAULT_MAX_PLAYERS 16
 #define BUFFER_SIZE 1024
@@ -57,6 +57,68 @@ void print_usage(const char *program_name) {
     fprintf(stderr, "  Note: max_players must be between 6 and 16\n");
 }
 
+static void handle_new_connection(int client_socket, game_manager_t game_manager, 
+                                client_fd_list_t **client_fd_list, int max_players) {
+    if (game_manager_get_player_count(game_manager) >= max_players) {
+        log(WARN, "Maximum players reached, rejecting connection");
+        close(client_socket);
+        return;
+    }
+
+    if (game_manager_add_player(game_manager, client_socket) == 0) {
+        *client_fd_list = add_client_fd(*client_fd_list, client_socket);
+        log(INFO, "New client added to list, total clients: %d", 
+            game_manager_get_player_count(game_manager));
+        
+        int player_count = game_manager_get_player_count(game_manager);
+        if (is_valid_player_count(player_count)) {
+            log(INFO, "Enough players to start game (%d players)", player_count);
+            game_manager_start_game(game_manager);
+            
+            // Get player sockets and roles for notification
+            int *player_sockets = game_manager_get_players_sockets(game_manager);
+            game_role_t *player_roles = malloc(sizeof(game_role_t) * player_count);
+            
+            for (int i = 0; i < player_count; i++) {
+                player_roles[i] = game_manager_get_player_role(game_manager, player_sockets[i]);
+            }
+            
+            send_message_to_all_players(player_sockets, player_count, "Game started!");
+            send_message_role_assignment(player_sockets, player_count, player_roles);
+            
+            free(player_sockets);
+            free(player_roles);
+        }
+    } else {
+        log(ERROR, "Failed to add new client");
+        close(client_socket);
+    }
+}
+
+static void setup_fd_sets(int server_socket, client_fd_list_t *client_fd_list, 
+                         fd_set *read_fds, int *max_fd, game_manager_t game_manager) {
+    FD_ZERO(read_fds);
+    FD_SET(server_socket, read_fds);
+    *max_fd = server_socket;
+
+    client_fd_list_t *current = client_fd_list;
+    while (current) {
+        if (!is_socket_connected(current->fd)) {
+            log(INFO, "Client %d disconnected", current->fd);
+            close(current->fd);
+            game_manager_remove_player(game_manager, current->fd);
+            client_fd_list = remove_client_fd(client_fd_list, current->fd);
+            current = client_fd_list;
+            continue;
+        }
+        FD_SET(current->fd, read_fds);
+        if (current->fd > *max_fd) {
+            *max_fd = current->fd;
+        }
+        current = current->next;
+    }
+}
+
 int main(int argc, char *argv[]) {
     const char *port = DEFAULT_PORT;
     int max_players = DEFAULT_MAX_PLAYERS;
@@ -94,25 +156,7 @@ int main(int argc, char *argv[]) {
     int max_fd = server_socket;
 
     while (1) {
-        FD_ZERO(&read_fds);
-        FD_SET(server_socket, &read_fds);
-
-        client_fd_list_t *current = client_fd_list;
-        while (current) {
-            if (!is_socket_connected(current->fd)) {
-                log(INFO, "Client %d disconnected", current->fd);
-                close(current->fd);
-                game_manager_remove_player(game_manager, current->fd);
-                client_fd_list = remove_client_fd(client_fd_list, current->fd);
-                current = client_fd_list;  // Start over with the new list
-                continue;
-            }
-            FD_SET(current->fd, &read_fds);
-            if (current->fd > max_fd) {
-                max_fd = current->fd;
-            }
-            current = current->next;
-        }
+        setup_fd_sets(server_socket, client_fd_list, &read_fds, &max_fd, game_manager);
 
         int activity = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
         if (activity < 0) {
@@ -124,31 +168,12 @@ int main(int argc, char *argv[]) {
         if (FD_ISSET(server_socket, &read_fds)) {
             int client_socket = accept_tcp_connection(server_socket);
             if (client_socket > 0) {
-                if (game_manager_get_player_count(game_manager) >= max_players) {
-                    log(WARN, "Maximum players reached, rejecting connection");
-                    close(client_socket);
-                } else {
-                    if (game_manager_add_player(game_manager, client_socket) == 0) {
-                        client_fd_list = add_client_fd(client_fd_list, client_socket);
-                        log(INFO, "New client added to list, total clients: %d", 
-                            game_manager_get_player_count(game_manager));
-                        
-                        // Check if we have enough players to start the game
-                        int player_count = game_manager_get_player_count(game_manager);
-                        if (is_valid_player_count(player_count)) {
-                            log(INFO, "Enough players to start game (%d players)", player_count);
-                            game_manager_start_game(game_manager);
-                        }
-                    } else {
-                        log(ERROR, "Failed to add new client");
-                        close(client_socket);
-                    }
-                }
+                handle_new_connection(client_socket, game_manager, &client_fd_list, max_players);
             }
         }
 
         // Check for data from existing clients
-        current = client_fd_list;
+        client_fd_list_t *current = client_fd_list;
         while (current) {
             int client_socket = current->fd;
             client_fd_list_t *next = current->next;  // Save next before potential removal
@@ -160,6 +185,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Cleanup
     while (client_fd_list) {
         client_fd_list_t *next = client_fd_list->next;
         close(client_fd_list->fd);

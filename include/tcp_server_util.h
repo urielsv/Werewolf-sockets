@@ -27,5 +27,4 @@ int validate_server_input(const char *host, const char *service);
 client_fd_list_t *add_client_fd(client_fd_list_t *client_fd_list, int client_socket);
 client_fd_list_t *remove_client_fd(client_fd_list_t *client_fd_list, int client_socket);
 bool is_socket_connected(int sockfd);
-
 #endif // __tcp_server_util_h__

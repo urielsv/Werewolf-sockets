@@ -284,7 +284,7 @@ game_manager_start_game(game_manager_t game_manager)
 }
 
 int *
-get_players_sockets(game_manager_t game_manager)
+game_manager_get_players_sockets(game_manager_t game_manager)
 {
     int *player_sockets = malloc(sizeof(int) * game_manager->player_count);
     int index = 0;
@@ -296,3 +296,17 @@ get_players_sockets(game_manager_t game_manager)
     return player_sockets;
 }
 
+
+bool
+game_manager_is_player_protected(game_manager_t game_manager, int socket_id)
+{
+    player_t *player = find_player_by_socket(game_manager, socket_id);
+    return player ? player->is_protected : false;
+}
+
+bool
+is_player_alive(game_manager_t game_manager, int socket_id)
+{
+    player_t *player = find_player_by_socket(game_manager, socket_id);
+    return player ? player->is_alive : false;
+}
