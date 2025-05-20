@@ -34,5 +34,6 @@ int game_manager_get_alive_count(game_manager_t game_manager);
 game_role_t game_manager_get_player_role(game_manager_t game_manager, int socket_id);
 bool game_manager_is_player_alive(game_manager_t game_manager, int socket_id);
 void game_manager_start_game(game_manager_t game_manager);
+int *get_players_sockets(game_manager_t game_manager);
 
 #endif // __game_manager_h__
