@@ -24,7 +24,7 @@ send_message_to_all_players(int *player_sockets, int player_count, const char *m
 
 void
 send_message_role_assignment(int *player_sockets, int player_count, 
-                           game_role_t *player_roles)
+                           game_role_t *player_roles, int werewolf_count)
 {
     if (!player_sockets || !player_roles) {
         log(ERROR, "Invalid parameters for send_message_role_assignment");
@@ -35,13 +35,12 @@ send_message_role_assignment(int *player_sockets, int player_count,
     for (int i = 0; i < player_count; i++) {
         const char *role_name;
         role_name = role_by_name(player_roles[i]);
-        snprintf(message, BUFFER_SIZE, "You are a %s!", role_name);
+        snprintf(message, BUFFER_SIZE, "You are a %s!\n", role_name);
         if (send(player_sockets[i], message, strlen(message), 0) < 0) {
             log(ERROR, "Failed to send role to player %d", player_sockets[i]);
         }
 
-        // If player is a werewolf, send list of other werewolves
-        if (player_roles[i] == ROLE_WEREWOLF) {
+        if (player_roles[i] == ROLE_WEREWOLF && --werewolf_count > 0) {
             snprintf(message, BUFFER_SIZE, "Your werewolf teammates are: ");
             for (int j = 0; j < player_count; j++) {
                 if (i != j && player_roles[j] == ROLE_WEREWOLF) {
@@ -50,6 +49,7 @@ send_message_role_assignment(int *player_sockets, int player_count,
                     strncat(message, temp, BUFFER_SIZE - strlen(message) - 1);
                 }
             }
+            strncat(message, "\n", BUFFER_SIZE - strlen(message) - 1);
             if (send(player_sockets[i], message, strlen(message), 0) < 0) {
                 log(ERROR, "Failed to send werewolf team info to player %d", player_sockets[i]);
             }
