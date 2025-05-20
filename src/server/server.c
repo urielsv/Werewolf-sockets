@@ -14,10 +14,16 @@
 #include "defs.h"
 #include "game_manager.h"
 #include "game_config.h"
+#include "game_messanger.h"
 #include "game_util.h"
+
 #define DEFAULT_PORT "8080"
 #define DEFAULT_MAX_PLAYERS 16
 #define BUFFER_SIZE 1024
+
+static channel_subscription_t chat_channel = {CHANNEL_CHAT, {0}, 0};
+static channel_subscription_t werewolf_channel = {CHANNEL_WEREWOLF, {0}, 0};
+static channel_subscription_t dead_channel = {CHANNEL_DEAD, {0}, 0};
 
 void
 handle_client_data(int client_socket, game_manager_t game_manager, client_fd_list_t **client_fd_list)
@@ -34,25 +40,58 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
         close(client_socket);
         *client_fd_list = remove_client_fd(*client_fd_list, client_socket);
         game_manager_remove_player(game_manager, client_socket);
+        
+        unsubscribe_from_channel(&chat_channel, client_socket);
+        unsubscribe_from_channel(&werewolf_channel, client_socket);
+        unsubscribe_from_channel(&dead_channel, client_socket);
         return;
     }
 
     buffer[valread] = '\0';
 
     // Ignore empty messages
-    if (strcmp(buffer, "") == 0 || strcmp(buffer, "\n") == 0) {
+    char *trimmed = buffer;
+   while (*trimmed == ' ' || *trimmed == '\t' || *trimmed == '\n' || *trimmed == '\r') trimmed++;
+   if (*trimmed == '\0') {
+       return;
+   }
+
+    log(INFO, "Received from client %d (player %d): %s", client_socket, game_manager_get_player_number(game_manager, client_socket), buffer);
+    
+    if (strncmp(buffer, "/whisper ", 9) == 0) {
+        char *rest = buffer + 9;
+        char *player_id_str = strtok(rest, " ");
+        char *message = strtok(NULL, "");
+        if (player_id_str && message) {
+            int target_player_number = atoi(player_id_str);
+            int to_socket = game_manager_get_socket_by_player_number(game_manager, target_player_number);
+            int from_player_number = game_manager_get_player_number(game_manager, client_socket);
+            if (to_socket > 0 && from_player_number > 0) {
+                send_whisper(client_socket, to_socket, from_player_number, target_player_number, message);
+                return;
+            }
+        }
+        // TODO: Send error message to client
         return;
     }
-    
-    log(INFO, "Received from client %d: %s", client_socket, buffer);
-    
-    // Echo back to client
-    if (send(client_socket, buffer, strlen(buffer), 0) < 0) {
-        log(ERROR, "Send failed to client %d: %s", client_socket, strerror(errno));
-        close(client_socket);
-        log(INFO, "Client %d disconnected", client_socket);
-        *client_fd_list = remove_client_fd(*client_fd_list, client_socket);
-        game_manager_remove_player(game_manager, client_socket);
+
+    int sender_number = game_manager_get_player_number(game_manager, client_socket);
+    if (sender_number <= 0) {
+        log(ERROR, "Invalid player number for client %d", client_socket);
+        return;
+    }
+
+    char formatted[BUFFER_SIZE];
+    snprintf(formatted, BUFFER_SIZE, "%s", format_message(CHANNEL_CHAT, sender_number, buffer));
+
+    // Forward message to appropriate channel based on player state
+    if (!game_manager_is_player_alive(game_manager, client_socket)) {
+        forward_message(&dead_channel, formatted);
+        // We will handle werewolf chat with /ww command
+    // } else if (game_manager_get_player_role(game_manager, client_socket) == ROLE_WEREWOLF) {
+    //     forward_message(&werewolf_channel, formatted);
+    } else {
+        forward_message(&chat_channel, formatted);
     }
 }
 
@@ -73,9 +112,8 @@ static void handle_new_connection(int client_socket, game_manager_t game_manager
 
     if (game_manager_get_phase(game_manager) != GAME_STATE_LOBBY) {
         log(INFO, "Game is not in lobby phase, rejecting connection");
-        char message[BUFFER_SIZE];
-        snprintf(message, BUFFER_SIZE, "The game has already started, come back later!\n");
-        send(client_socket, message, strlen(message), 0);
+        send_message(client_socket, CHANNEL_ANNOUNCEMENT, 
+                    "The game has already started, come back later!", game_manager_get_player_number(game_manager, client_socket));
         close(client_socket);
         return;
     }
@@ -84,6 +122,8 @@ static void handle_new_connection(int client_socket, game_manager_t game_manager
         *client_fd_list = add_client_fd(*client_fd_list, client_socket);
         log(INFO, "New client added to list, total clients: %d", 
             game_manager_get_player_count(game_manager));
+        
+        subscribe_to_channel(&chat_channel, client_socket);
         
         int player_count = game_manager_get_player_count(game_manager);
         if (is_valid_player_count(player_count)) {
@@ -96,10 +136,34 @@ static void handle_new_connection(int client_socket, game_manager_t game_manager
             
             for (int i = 0; i < player_count; i++) {
                 player_roles[i] = game_manager_get_player_role(game_manager, player_sockets[i]);
+                
+                if (player_roles[i] == ROLE_WEREWOLF) {
+                    subscribe_to_channel(&werewolf_channel, player_sockets[i]);
+                }
             }
             
-            send_message_to_all_players(player_sockets, player_count, "The game has started!\n");
-            send_message_role_assignment(player_sockets, player_count, player_roles, game_manager_get_werewolf_count(game_manager));
+            broadcast_message(CHANNEL_ANNOUNCEMENT, "The game has started!");
+            
+            int werewolf_count = game_manager_get_werewolf_count(game_manager);
+            for (int i = 0; i < player_count; i++) {
+                char role_message[BUFFER_SIZE];
+                char *role_name = role_by_name(player_roles[i]);
+                snprintf(role_message, BUFFER_SIZE, "You are a %s!", role_name);
+                send_message(player_sockets[i], CHANNEL_ANNOUNCEMENT, role_message, game_manager_get_player_number(game_manager, player_sockets[i]));
+                
+                if (player_roles[i] == ROLE_WEREWOLF && werewolf_count-1 > 0) {
+                    char team_message[BUFFER_SIZE] = "Your werewolf teammates are: ";
+                    for (int j = 0; j < player_count; j++) {
+                        if (i != j && player_roles[j] == ROLE_WEREWOLF) {
+                            char temp[32];
+                            snprintf(temp, sizeof(temp), "Player %d, ", player_sockets[j]);
+                            strncat(team_message, temp, BUFFER_SIZE - strlen(team_message) - 1);
+                        }
+                    }
+                    strncat(team_message, "\n", BUFFER_SIZE - strlen(team_message) - 1);
+                    send_message(player_sockets[i], CHANNEL_ANNOUNCEMENT, team_message, game_manager_get_player_number(game_manager, player_sockets[i]));
+                }
+            }
             
             free(player_sockets);
             free(player_roles);
@@ -135,6 +199,7 @@ static void setup_fd_sets(int server_socket, client_fd_list_t *client_fd_list,
 }
 
 int main(int argc, char *argv[]) {
+    close(STDIN_FILENO);
     const char *port = DEFAULT_PORT;
     int max_players = DEFAULT_MAX_PLAYERS;
 
@@ -179,7 +244,6 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // Check for new connection
         if (FD_ISSET(server_socket, &read_fds)) {
             int client_socket = accept_tcp_connection(server_socket);
             if (client_socket > 0) {
@@ -187,7 +251,6 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // Check for data from existing clients
         client_fd_list_t *current = client_fd_list;
         while (current) {
             int client_socket = current->fd;

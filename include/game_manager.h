@@ -41,4 +41,7 @@ bool game_manager_is_player_protected(game_manager_t game_manager, int socket_id
 void game_manager_start_game(game_manager_t game_manager);
 int *game_manager_get_players_sockets(game_manager_t game_manager);
 game_state_t game_manager_get_phase(game_manager_t game_manager);
+
+int game_manager_get_player_number(game_manager_t game_manager, int socket_id);
+int game_manager_get_socket_by_player_number(game_manager_t game_manager, int player_number);
 #endif // __game_manager_h__

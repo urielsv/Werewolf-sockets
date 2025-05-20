@@ -7,6 +7,7 @@
 
 typedef struct player_t {
     int socket_id;
+    int player_number;
     game_role_t role;
     bool is_alive;
     bool is_protected;  
@@ -142,6 +143,7 @@ game_manager_add_player(game_manager_t game_manager, int socket_id)
     player->is_protected = false;
     player->has_used_ability = false;
     player->role = ROLE_UNASSIGNED;
+    player->player_number = game_manager->player_count + 1;
     player->next = game_manager->players;  // Add to front of list
     game_manager->players = player;
 
@@ -320,4 +322,20 @@ is_player_alive(game_manager_t game_manager, int socket_id)
 {
     player_t *player = find_player_by_socket(game_manager, socket_id);
     return player ? player->is_alive : false;
+}
+
+int game_manager_get_player_number(game_manager_t game_manager, int socket_id) {
+    player_t *player = find_player_by_socket(game_manager, socket_id);
+    return player ? player->player_number : -1;
+}
+
+int game_manager_get_socket_by_player_number(game_manager_t game_manager, int player_number) {
+    player_t *player = game_manager->players;
+    while (player) {
+        if (player->player_number == player_number) {
+            return player->socket_id;
+        }
+        player = player->next;
+    }
+    return -1;
 }
