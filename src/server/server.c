@@ -16,6 +16,7 @@
 #include "game_config.h"
 #include "game_messanger.h"
 #include "game_util.h"
+#include "command_handler.h"
 
 #define DEFAULT_PORT "8080"
 #define DEFAULT_MAX_PLAYERS 16
@@ -56,26 +57,13 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
        return;
    }
 
-    log(INFO, "Received from client %d (player %d): %s", client_socket, game_manager_get_player_number(game_manager, client_socket), buffer);
-    
-    if (strncmp(buffer, "/whisper ", 9) == 0) {
-        char *rest = buffer + 9;
-        char *player_id_str = strtok(rest, " ");
-        char *message = strtok(NULL, "");
-        if (player_id_str && message) {
-            int target_player_number = atoi(player_id_str);
-            int to_socket = game_manager_get_socket_by_player_number(game_manager, target_player_number);
-            int from_player_number = game_manager_get_player_number(game_manager, client_socket);
-            if (to_socket > 0 && from_player_number > 0) {
-                send_whisper(client_socket, to_socket, from_player_number, target_player_number, message);
-                return;
-            }
-        }
-        // TODO: Send error message to client
+    int sender_number = game_manager_get_player_number(game_manager, client_socket);
+    log(INFO, "Received from client %d (player %d): %s", client_socket, sender_number, buffer);
+
+    if (handle_if_command(buffer, client_socket, game_manager) > 0) {
         return;
     }
 
-    int sender_number = game_manager_get_player_number(game_manager, client_socket);
     if (sender_number <= 0) {
         log(ERROR, "Invalid player number for client %d", client_socket);
         return;
@@ -84,12 +72,8 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
     char formatted[BUFFER_SIZE];
     snprintf(formatted, BUFFER_SIZE, "%s", format_message(CHANNEL_CHAT, sender_number, buffer));
 
-    // Forward message to appropriate channel based on player state
     if (!game_manager_is_player_alive(game_manager, client_socket)) {
         forward_message(&dead_channel, formatted);
-        // We will handle werewolf chat with /ww command
-    // } else if (game_manager_get_player_role(game_manager, client_socket) == ROLE_WEREWOLF) {
-    //     forward_message(&werewolf_channel, formatted);
     } else {
         forward_message(&chat_channel, formatted);
     }

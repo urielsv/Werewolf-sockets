@@ -11,6 +11,7 @@
 #include "tcp_client_util.h"
 #include "util.h"
 #include "game_messanger.h"
+#include "command_dispatcher.h"
 
 #define DEFAULT_PORT "8080"
 #define DEFAULT_HOST "127.0.0.1"
@@ -58,6 +59,7 @@ int main(int argc, char *argv[]) {
     }
 
     log(INFO, "Connected to server at %s:%s", host, port);
+    // TODO: Create a welcome header
     printf("Connected to server. Type your messages and press Enter to send.\n");
     printf("Available commands:\n");
     printf("  /whisper <player_id> <message> - Send private message\n");
@@ -103,43 +105,16 @@ int main(int argc, char *argv[]) {
             buffer[strcspn(buffer, "\n")] = 0;
             
             // Handle commands
-            // TODO: Make it a command dispatcher
             if (buffer[0] == '/') {
                 char *cmd = strtok(buffer + 1, " ");
-                if (cmd) {
-                    if (strcmp(cmd, "help") == 0) {
-                        printf("Available commands:\n");
-                        printf("  /whisper <player_id> <message> - Send private message\n");
-                        printf("  /help - Show this help message\n");
-                        continue;
-                    } else if (strcmp(cmd, "whisper") == 0) {
-                        char *player_id_str = strtok(NULL, " ");
-                        char *message = strtok(NULL, "");
-                        
-                        if (!player_id_str || !message) {
-                            printf("Usage: /whisper <player_id> <message>\n");
-                            continue;
-                        }
-                        
-                        int player_id = atoi(player_id_str);
-                        if (player_id <= 0) {
-                            printf("Invalid player ID\n");
-                            continue;
-                        }
-                        
-                        char whisper_cmd[BUFFER_SIZE];
-                        snprintf(whisper_cmd, BUFFER_SIZE, "/whisper %d %s", player_id, message);
-                        if (send(sock, whisper_cmd, strlen(whisper_cmd), 0) < 0) {
-                            log(ERROR, "Failed to send whisper message");
-                        }
-                        continue;
-                    }
-                }
-            }
-            
+                char *arg1 = strtok(NULL, " ");
+                char *arg2 = strtok(NULL, "");
+                dispatch_command(cmd, sock, arg1, arg2);
+            } else {
             if (send(sock, buffer, strlen(buffer), 0) < 0) {
                 log(ERROR, "Send failed: %s", strerror(errno));
                 break;
+            }
             }
         }
     }
