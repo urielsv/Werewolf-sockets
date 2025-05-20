@@ -196,6 +196,12 @@ game_manager_get_alive_count(game_manager_t game_manager)
     return game_manager ? game_manager->alive_count : 0;
 }
 
+int
+game_manager_get_werewolf_count(game_manager_t game_manager)
+{
+    return game_manager ? game_manager->roles[ROLE_WEREWOLF].total_count : 0;
+}
+
 game_role_t
 game_manager_get_player_role(game_manager_t game_manager, int socket_id)
 {
@@ -296,6 +302,11 @@ game_manager_get_players_sockets(game_manager_t game_manager)
     return player_sockets;
 }
 
+game_state_t
+game_manager_get_phase(game_manager_t game_manager)
+{
+    return game_manager->state.current_phase;
+}
 
 bool
 game_manager_is_player_protected(game_manager_t game_manager, int socket_id)
