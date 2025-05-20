@@ -53,12 +53,10 @@ validate_client_input(const char *host, const char *port)
 int
 set_client_socket_options(int sockfd)
 {
-    // Set socket timeout
     if (set_socket_timeout(sockfd, CONNECT_TIMEOUT_SEC) < 0) {
         return RET_ERROR;
     }
-
-    // Set socket to non-blocking mode
+    
     if (set_nonblocking(sockfd) < 0) {
         return RET_ERROR;
     }

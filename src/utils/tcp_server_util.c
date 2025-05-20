@@ -13,6 +13,63 @@
 
 static char addr_buff[MAX_ADDR_BUFF];
 
+
+client_fd_list_t *
+add_client_fd(client_fd_list_t *client_fd_list, int client_socket)
+{
+    client_fd_list_t *new_node = malloc(sizeof(client_fd_list_t));
+    if (!new_node) {
+        log(ERROR, "Failed to allocate memory for new client");
+        return client_fd_list;
+    }
+    new_node->fd = client_socket;
+    new_node->next = client_fd_list;
+    return new_node;
+}
+
+client_fd_list_t *
+remove_client_fd(client_fd_list_t *client_fd_list, int client_socket)
+{
+    if (!client_fd_list) {
+        return NULL;
+    }
+
+    if (client_fd_list->fd == client_socket) {
+        client_fd_list_t *next = client_fd_list->next;
+        log(INFO, "Removing client %d from list", client_socket);
+        free(client_fd_list);
+        return next;
+    }
+
+    client_fd_list_t *current = client_fd_list;
+    while (current->next) {
+        if (current->next->fd == client_socket) {
+            client_fd_list_t *next = current->next->next;
+            log(INFO, "Removing client %d from list", client_socket);
+            free(current->next);
+            current->next = next;
+            break;
+        }
+        current = current->next;
+    }
+    return client_fd_list;
+}
+
+bool
+is_socket_connected(int sockfd)
+{
+    int error = 0;
+    socklen_t len = sizeof(error);
+    int retval = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len);
+    if (retval != 0) {
+        return false;
+    }
+    if (error != 0) {
+        return false;
+    }
+    return true;
+}
+
 int
 validate_server_input(const char *host, const char *service)
 {
@@ -21,7 +78,6 @@ validate_server_input(const char *host, const char *service)
         return RET_ERROR;
     }
 
-    // Validate service (port) is numeric
     for (const char *p = service; *p; p++) {
         if (*p < '0' || *p > '9') {
             log(ERROR, "Invalid service number");
@@ -29,7 +85,6 @@ validate_server_input(const char *host, const char *service)
         }
     }
 
-    // Validate port range
     int port = atoi(service);
     if (port <= 0 || port > 65535) {
         log(ERROR, "Service number out of range");
