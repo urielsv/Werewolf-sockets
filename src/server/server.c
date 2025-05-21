@@ -79,15 +79,19 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
     }
 }
 
-void print_usage(const char *program_name) {
+inline void 
+print_usage(const char *program_name) 
+{
     fprintf(stderr, "Usage: %s [port] [max_players]\n", program_name);
     fprintf(stderr, "  port: Port number to listen on (default: %s)\n", DEFAULT_PORT);
     fprintf(stderr, "  max_players: Maximum number of players (default: %d)\n", DEFAULT_MAX_PLAYERS);
     fprintf(stderr, "  Note: max_players must be between 6 and 16\n");
 }
 
-static void handle_new_connection(int client_socket, game_manager_t game_manager, 
-                                client_fd_list_t **client_fd_list, int max_players) {
+static void 
+handle_new_connection(int client_socket, game_manager_t game_manager, 
+                       client_fd_list_t **client_fd_list, int max_players) 
+{
     if (game_manager_get_player_count(game_manager) >= max_players) {
         log(WARN, "Maximum players reached, rejecting connection");
         close(client_socket);
@@ -97,7 +101,8 @@ static void handle_new_connection(int client_socket, game_manager_t game_manager
     if (game_manager_get_phase(game_manager) != GAME_STATE_LOBBY) {
         log(INFO, "Game is not in lobby phase, rejecting connection");
         send_message(client_socket, CHANNEL_ANNOUNCEMENT, 
-                    "The game has already started, come back later!", game_manager_get_player_number(game_manager, client_socket));
+                    "The game has already started, come back later!", 
+                        game_manager_get_player_number(game_manager, client_socket));
         close(client_socket);
         return;
     }
@@ -158,8 +163,10 @@ static void handle_new_connection(int client_socket, game_manager_t game_manager
     }
 }
 
-static void setup_fd_sets(int server_socket, client_fd_list_t *client_fd_list, 
-                         fd_set *read_fds, int *max_fd, game_manager_t game_manager) {
+static void 
+setup_fd_sets(int server_socket, client_fd_list_t *client_fd_list, 
+                         fd_set *read_fds, int *max_fd, game_manager_t game_manager) 
+{
     FD_ZERO(read_fds);
     FD_SET(server_socket, read_fds);
     *max_fd = server_socket;
@@ -182,7 +189,9 @@ static void setup_fd_sets(int server_socket, client_fd_list_t *client_fd_list,
     }
 }
 
-int main(int argc, char *argv[]) {
+int 
+main(int argc, const char *argv[]) 
+{
     close(STDIN_FILENO);
     const char *port = DEFAULT_PORT;
     int max_players = DEFAULT_MAX_PLAYERS;

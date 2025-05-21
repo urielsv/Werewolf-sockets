@@ -6,7 +6,9 @@
 #include "logger.h"
 #include "game_messanger.h"
 
-const char *channel_name(message_channel_t channel) {
+const char *
+channel_name(message_channel_t channel)
+{
     switch (channel) {
         case CHANNEL_ANNOUNCEMENT: return "ANNOUNCEMENT";
         case CHANNEL_CHAT: return "CHAT";
@@ -17,7 +19,8 @@ const char *channel_name(message_channel_t channel) {
     }
 }
 
-const char *get_channel_color(message_channel_t channel) {
+const char *get_channel_color(message_channel_t channel)
+{
     switch (channel) {
         case CHANNEL_ANNOUNCEMENT: return "\033[1;33m";  // Yellow
         case CHANNEL_WEREWOLF: return "\033[1;31m";      // Red
@@ -28,7 +31,9 @@ const char *get_channel_color(message_channel_t channel) {
     }
 }
 
-message_channel_t parse_message_channel(const char *message) {
+message_channel_t
+parse_message_channel(const char *message)
+{
     if (!message || message[0] != '[') {
         return CHANNEL_COUNT;  
     }
@@ -50,7 +55,9 @@ message_channel_t parse_message_channel(const char *message) {
     return CHANNEL_COUNT;
 }
 
-char *format_message(message_channel_t channel, int player_number, const char *message) {
+char *
+format_message(message_channel_t channel, int player_number, const char *message) 
+{
     static char formatted[BUFFER_SIZE];
     snprintf(formatted, BUFFER_SIZE, "[%s] Player %d: %s\n", 
              channel_name(channel), player_number, message);
@@ -58,14 +65,18 @@ char *format_message(message_channel_t channel, int player_number, const char *m
 }
 
 
-static char *format_whisper_message(int from_id, int to_id, const char *message) {
+static char *
+format_whisper_message(int from_id, int to_id, const char *message)
+{
     static char formatted[BUFFER_SIZE];
     snprintf(formatted, BUFFER_SIZE, "[WHISPER] From Player %d to Player %d: %s\n",
              from_id, to_id, message);
     return formatted;
 }
 
-int read_and_format_message(int socket_id, char *buffer, size_t buffer_size) {
+inline int
+read_and_format_message(int socket_id, char *buffer, size_t buffer_size)
+{
     if (socket_id < 0 || !buffer || buffer_size == 0) {
         log(ERROR, "Invalid parameters for read_and_format_message");
         return -1;
@@ -90,7 +101,9 @@ int read_and_format_message(int socket_id, char *buffer, size_t buffer_size) {
     return valread;
 }
 
-int send_message(int socket_id, message_channel_t channel, const char *message, int player_number) {
+int 
+send_message(int socket_id, message_channel_t channel, const char *message, int player_number) 
+{
     if (socket_id < 0 || !message) {
         log(ERROR, "Invalid parameters for send_message");
         return -1;
@@ -106,7 +119,9 @@ int send_message(int socket_id, message_channel_t channel, const char *message, 
 }
 
 
-int send_whisper(int from_socket_id, int to_socket_id, int from_player_number, int to_player_number, const char *message) {
+int 
+send_whisper(int from_socket_id, int to_socket_id, int from_player_number, int to_player_number, const char *message) 
+{
     if (from_socket_id < 0 || to_socket_id < 0 || !message) {
         log(ERROR, "Invalid parameters for send_whisper");
         return -1;
@@ -130,7 +145,9 @@ int send_whisper(int from_socket_id, int to_socket_id, int from_player_number, i
     return rv;
 }
 
-int broadcast_message(message_channel_t channel, const char *message) {
+int 
+broadcast_message(message_channel_t channel, const char *message) 
+{
     if (!message) {
         log(ERROR, "Invalid message for broadcast");
         return -1;
@@ -145,7 +162,9 @@ int broadcast_message(message_channel_t channel, const char *message) {
     return rv;
 }
 
-int forward_message(channel_subscription_t *subscription, const char *message) {
+int 
+forward_message(channel_subscription_t *subscription, const char *message) 
+{
     if (!subscription || !message) {
         log(ERROR, "Invalid parameters for forward_message");
         return -1;
@@ -161,7 +180,9 @@ int forward_message(channel_subscription_t *subscription, const char *message) {
 }
 
 // Subscribe a socket to a channel
-int subscribe_to_channel(channel_subscription_t *subscription, int socket_id) {
+int 
+subscribe_to_channel(channel_subscription_t *subscription, int socket_id) 
+{
     if (!subscription || socket_id < 0) {
         log(ERROR, "Invalid parameters for subscribe_to_channel");
         return -1;
@@ -181,7 +202,9 @@ int subscribe_to_channel(channel_subscription_t *subscription, int socket_id) {
     return 0;
 }
 
-int unsubscribe_from_channel(channel_subscription_t *subscription, int socket_id) {
+int 
+unsubscribe_from_channel(channel_subscription_t *subscription, int socket_id) 
+{
     if (!subscription || socket_id < 0) {
         log(ERROR, "Invalid parameters for unsubscribe_from_channel");
         return -1;
@@ -199,7 +222,9 @@ int unsubscribe_from_channel(channel_subscription_t *subscription, int socket_id
     return -1;
 }
 
-bool is_subscribed(channel_subscription_t *subscription, int socket_id) {
+bool 
+is_subscribed(channel_subscription_t *subscription, int socket_id) 
+{
     if (!subscription || socket_id < 0) {
         return false;
     }

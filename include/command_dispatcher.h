@@ -1,8 +1,11 @@
 #ifndef __command_dispatcher_h__
 #define __command_dispatcher_h__
 
+#define COMMAND_ALIAS_MAX 16
 typedef struct {
-    const char *name;
+    const char *aliases[COMMAND_ALIAS_MAX];
+    const char *usage;
+    const char *description;
     void (*function)(int sockfd, void *arg1, void *arg2);
     void *arg1;
     void *arg2;

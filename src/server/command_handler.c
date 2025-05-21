@@ -9,9 +9,12 @@
 #include "defs.h"
 
 
-static void handle_whisper_command(char *buffer, int client_socket, game_manager_t game_manager);
+static void
+handle_whisper_command(char *buffer, int client_socket, game_manager_t game_manager);
 
-int handle_if_command(char *buffer, int client_socket, game_manager_t game_manager) {
+int 
+handle_if_command(char *buffer, int client_socket, game_manager_t game_manager) 
+{
     // TODO: Check if there is a more elegant way to do this
     if (strncmp(buffer, "/whisper ", strlen("/whisper")) == 0) {
         handle_whisper_command(buffer, client_socket, game_manager);
@@ -25,7 +28,9 @@ int handle_if_command(char *buffer, int client_socket, game_manager_t game_manag
     return RET_ERROR;
 }
 
-static void handle_whisper_command(char *buffer, int client_socket, game_manager_t game_manager) {
+static void 
+handle_whisper_command(char *buffer, int client_socket, game_manager_t game_manager) 
+{
     char *rest = buffer + strlen("/whisper");
     char *player_id_str = strtok(rest, " ");
     char *message = strtok(NULL, "");
