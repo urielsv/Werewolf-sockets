@@ -57,30 +57,42 @@ parse_message_channel(const char *message)
 }
 
 char *
-format_server_message(const char *message)
+format_message(const message_t *msg)
 {
     static char formatted[BUFFER_SIZE];
-    snprintf(formatted, BUFFER_SIZE, "[SERVER] %s\n", message);
+    const char *color = get_channel_color(msg->channel);
+    
+    if (msg->is_system) {
+        snprintf(formatted, BUFFER_SIZE, "%s[%s] %s\033[0m\n",
+                color, channel_name(msg->channel), msg->content);
+    }
+    else if (msg->receiver_id != -1) {  // Whisper/Direct message
+        snprintf(formatted, BUFFER_SIZE, "%s[%s] From Player %d to Player %d: %s\033[0m\n",
+                color, channel_name(msg->channel), msg->sender_id, msg->receiver_id, msg->content);
+    }
+    else {  // Normal player message
+        snprintf(formatted, BUFFER_SIZE, "%s[%s] Player %d: %s\033[0m\n",
+                color, channel_name(msg->channel), msg->sender_id, msg->content);
+    }
+    
     return formatted;
 }
 
-char *
-format_message(message_channel_t channel, int player_number, const char *message) 
+int
+send_game_message(const message_t *msg, int socket_id)
 {
-    static char formatted[BUFFER_SIZE];
-    snprintf(formatted, BUFFER_SIZE, "[%s] Player %d: %s\n", 
-             channel_name(channel), player_number, message);
-    return formatted;
-}
+    if (socket_id < 0 || !msg || !msg->content) {
+        log(ERROR, "Invalid parameters for send_game_message");
+        return -1;
+    }
 
-
-static char *
-format_whisper_message(int from_id, int to_id, const char *message)
-{
-    static char formatted[BUFFER_SIZE];
-    snprintf(formatted, BUFFER_SIZE, "[WHISPER] From Player %d to Player %d: %s\n",
-             from_id, to_id, message);
-    return formatted;
+    char *formatted = format_message(msg);
+    int rv = send(socket_id, formatted, strlen(formatted) + 1, 0);
+    if (rv < 0) {
+        log(ERROR, "Failed to send message to socket %d", socket_id);
+        return -1;
+    }
+    return rv;
 }
 
 int
@@ -110,7 +122,18 @@ read_and_format_message(int socket_id, char *buffer, size_t buffer_size)
     return valread;
 }
 
-int 
+int
+send_player_message(int socket_id, message_channel_t channel, const char *message, int player_number) 
+{
+    if (socket_id < 0 || !message) {
+        log(ERROR, "Invalid parameters for send_player_message");
+        return -1;
+    }
+    message_t msg = {channel, -1, player_number, message, false};
+    return send_game_message(&msg, socket_id);
+}
+
+int
 send_message(int socket_id, message_channel_t channel, const char *message, int player_number) 
 {
     if (socket_id < 0 || !message) {
@@ -118,15 +141,9 @@ send_message(int socket_id, message_channel_t channel, const char *message, int 
         return -1;
     }
 
-    char *formatted = format_message(channel, player_number, message);
-    int rv = send(socket_id, formatted, strlen(formatted) + 1, 0);
-    if (rv < 0) {
-        log(ERROR, "Failed to send message to socket %d", socket_id);
-        return -1;
-    }
-    return rv;
+    message_t msg = {channel, -1, player_number, message, false};
+    return send_game_message(&msg, socket_id);
 }
-
 
 int 
 send_whisper(int from_socket_id, int to_socket_id, int from_player_number, int to_player_number, const char *message) 
@@ -136,16 +153,15 @@ send_whisper(int from_socket_id, int to_socket_id, int from_player_number, int t
         return -1;
     }
 
-    char *formatted = format_whisper_message(from_player_number, to_player_number, message);
-    log(INFO, "Sending whisper to socket %d: %s", to_socket_id, formatted);
-    int rv = send(to_socket_id, formatted, strlen(formatted), 0);
+    message_t msg = {CHANNEL_WHISPER, from_player_number, to_player_number, message, false};
+    int rv = send_game_message(&msg, to_socket_id);
     if (rv < 0) {
         log(ERROR, "Failed to send whisper to socket %d", to_socket_id);
         return -1;
     }
 
-    char *confirmation = format_whisper_message(from_player_number, to_player_number, message);
-    rv = send(from_socket_id, confirmation, strlen(confirmation), 0);
+    message_t confirmation = {CHANNEL_WHISPER, from_player_number, to_player_number, message, false};
+    rv = send_game_message(&confirmation, from_socket_id);
     if (rv < 0) {
         log(ERROR, "Failed to send whisper confirmation to socket %d", from_socket_id);
         return -1;
@@ -153,7 +169,6 @@ send_whisper(int from_socket_id, int to_socket_id, int from_player_number, int t
 
     return rv;
 }
-
 
 int 
 forward_message(channel_subscription_t *subscription, const char *message) 

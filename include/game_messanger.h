@@ -1,5 +1,5 @@
-#ifndef __game_messanger_h__
-#define __game_messanger_h__
+#ifndef GAME_MESSANGER_H
+#define GAME_MESSANGER_H
 
 #include <stdbool.h>
 #include "game_manager.h"
@@ -15,19 +15,28 @@ typedef enum {
 } message_channel_t;
 
 typedef struct {
-    message_channel_t channel;
-    int socket_ids[MAX_SUBSCRIPTIONS];
     int subscription_count;
+    int socket_ids[MAX_SUBSCRIPTIONS];
+    message_channel_t channel;
 } channel_subscription_t;
 
+typedef struct message {
+    message_channel_t channel;
+    int sender_id;        // -1 for system messages
+    int receiver_id;      // -1 for broadcast messages
+    const char *content;
+    bool is_system;       // true for system/server messages
+} message_t;
+
 // Message formatting and parsing
+const char *channel_name(message_channel_t channel);
 const char *get_channel_color(message_channel_t channel);
 message_channel_t parse_message_channel(const char *message);
-char *format_message(message_channel_t channel, int player_number, const char *message);
-char *format_server_message(const char *message);
+char *format_message(const message_t *msg);
 int read_and_format_message(int socket_id, char *buffer, size_t buffer_size);
 
 // Message sending functions
+int send_game_message(const message_t *msg, int socket_id);
 int send_message(int socket_id, message_channel_t channel, const char *message, int player_number);
 int send_whisper(int from_socket_id, int to_socket_id, int from_player_number, int to_player_number, const char *message);
 int forward_message(channel_subscription_t *subscription, const char *message);
@@ -37,7 +46,4 @@ int subscribe_to_channel(channel_subscription_t *subscription, int socket_id);
 int unsubscribe_from_channel(channel_subscription_t *subscription, int socket_id);
 bool is_subscribed(channel_subscription_t *subscription, int socket_id);
 
-// Message formatting
-const char *channel_name(message_channel_t channel);
-
-#endif // __game_messanger_h__ 
+#endif // GAME_MESSANGER_H 

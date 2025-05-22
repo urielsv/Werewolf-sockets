@@ -42,7 +42,7 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
         close(client_socket);
         *client_fd_list = remove_client_fd(*client_fd_list, client_socket);
         game_manager_remove_player(game_manager, client_socket);
-        
+
         unsubscribe_from_channel(&chat_channel, client_socket);
         unsubscribe_from_channel(&werewolf_channel, client_socket);
         unsubscribe_from_channel(&announcement_channel, client_socket);
@@ -71,30 +71,36 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
         return;
     }
 
-    char formatted[BUFFER_SIZE];
-    // Handle it better
+    message_t msg = {
+        .channel = CHANNEL_CHAT,
+        .sender_id = sender_number,
+        .receiver_id = -1,  // broadcast
+        .content = buffer,
+        .is_system = false
+    };
+
     switch (game_manager_get_phase(game_manager)) {
         case GAME_STATE_DAY:
-            log(INFO, "Sending message to chat channel");
-            snprintf(formatted, BUFFER_SIZE, "%s", format_message(CHANNEL_CHAT, sender_number, buffer));
-            forward_message(&chat_channel, formatted);
+            forward_message(&chat_channel, format_message(&msg));
             break;
+        
         case GAME_STATE_NIGHT:
-            log(INFO, "Sending message to werewolf channel");
-            snprintf(formatted, BUFFER_SIZE, "%s", format_message(CHANNEL_CHAT, sender_number, buffer));
             if (game_manager_is_player_werewolf(game_manager, client_socket)) {
-                send_message(client_socket, CHANNEL_WEREWOLF, buffer, sender_number);
-                break;
+                msg.channel = CHANNEL_WEREWOLF;
+                send_game_message(&msg, client_socket);
+            } else {
+                message_t error_msg = {
+                    .channel = CHANNEL_SERVER,
+                    .content = "It is night time, you are not allowed to talk!",
+                    .is_system = true
+                };
+                send_game_message(&error_msg, client_socket);
             }
-            char msg[BUFFER_SIZE] = "It is night time, you are not allowed to talk!";
-            snprintf(formatted, BUFFER_SIZE, "%s", format_server_message(msg));
-            send_message(client_socket, CHANNEL_SERVER, formatted, sender_number);
             break;
         // TODO: Add voting and ended phases
         case GAME_STATE_VOTING:
         case GAME_STATE_ENDED:
         default:
-
             break;
     }
 
@@ -122,8 +128,7 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
     if (game_manager_get_phase(game_manager) != GAME_STATE_LOBBY) {
         log(INFO, "Game is not in lobby phase, rejecting connection");
         send_message(client_socket, CHANNEL_ANNOUNCEMENT, 
-                    "The game has already started, come back later!", 
-                        game_manager_get_player_number(game_manager, client_socket));
+                    "The game has already started, come back later!", -1);
         unsubscribe_from_channel(&announcement_channel, client_socket);
         unsubscribe_from_channel(&server_channel, client_socket);
         unsubscribe_from_channel(&chat_channel, client_socket);
@@ -156,18 +161,23 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
                 }
             }
 
-            // char formatted[BUFFER_SIZE];
-            // char *msg = "The game has started!";
-            // char *announcement = format_message(CHANNEL_ANNOUNCEMENT, 0, msg);
-            // strncpy(formatted, announcement, BUFFER_SIZE - 1);
-            // formatted[BUFFER_SIZE - 1] = '\0'; 
-            // forward_message(&announcement_channel, formatted);
+            message_t game_start_msg = {
+                .channel = CHANNEL_ANNOUNCEMENT,
+                .content = "The game has started! It is now night time.",
+                .is_system = true
+            };
+            forward_message(&announcement_channel, format_message(&game_start_msg));
             int werewolf_count = game_manager_get_werewolf_count(game_manager);
             for (int i = 0; i < player_count; i++) {
                 char role_message[BUFFER_SIZE];
                 const char *role_name = role_by_name(player_roles[i]);
                 snprintf(role_message, BUFFER_SIZE, "You are a %s!", role_name);
-                send_message(player_sockets[i], CHANNEL_ANNOUNCEMENT, role_message, game_manager_get_player_number(game_manager, player_sockets[i]));
+                message_t role_msg = {
+                    .channel = CHANNEL_SERVER,
+                    .content = role_message,
+                    .is_system = true
+                };
+                send_game_message(&role_msg, player_sockets[i]);
                 
                 if (player_roles[i] == ROLE_WEREWOLF && werewolf_count-1 > 0) {
                     char team_message[BUFFER_SIZE] = "Your werewolf teammates are: ";
@@ -179,7 +189,12 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
                         }
                     }
                     strncat(team_message, "\n", BUFFER_SIZE - strlen(team_message) - 1);
-                    send_message(player_sockets[i], CHANNEL_ANNOUNCEMENT, team_message, game_manager_get_player_number(game_manager, player_sockets[i]));
+                    message_t team_msg = {
+                        .channel = CHANNEL_ANNOUNCEMENT,
+                        .content = team_message,
+                        .is_system = true
+                    };
+                    send_game_message(&team_msg, player_sockets[i]);
                 }
             }
             
@@ -258,6 +273,16 @@ main(int argc, const char *argv[])
     int max_fd = server_socket;
 
     while (1) {
+        // TODO: Check if this is a correct way to do this
+        log(INFO, "Werewolf alive count: %d", game_manager_get_werewolf_alive_count(game_manager));
+        log(INFO, "Phase: %d", game_manager_get_phase(game_manager));
+        if (game_manager_get_werewolf_alive_count(game_manager) <= 0 && game_manager_get_phase(game_manager) != GAME_STATE_LOBBY) {
+            log(INFO, "No werewolves left, ending game...");
+            char msg[BUFFER_SIZE] = "No werewolves left, ending game...";
+            forward_message(&announcement_channel, msg);
+            break;
+        }
+
         setup_fd_sets(server_socket, client_fd_list, &read_fds, &max_fd, game_manager);
 
         int activity = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
@@ -273,6 +298,8 @@ main(int argc, const char *argv[])
             }
         }
 
+
+
         client_fd_list_t *current = client_fd_list;
         while (current) {
             int client_socket = current->fd;
@@ -283,6 +310,8 @@ main(int argc, const char *argv[])
             }
             current = next;
         }
+        
+
     }
 
     // Cleanup

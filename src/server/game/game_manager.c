@@ -224,6 +224,10 @@ game_manager_remove_player(game_manager_t game_manager, int socket_id)
                 if (player->is_protected) {
                     game_manager->roles[player->role].protected_count--;
                 }
+                
+                if (player->role == ROLE_WEREWOLF) {
+                    game_manager->roles[ROLE_WEREWOLF].alive_count--;
+                }
             }
 
             *pp = player->next;  // Remove from list
@@ -257,6 +261,15 @@ game_manager_get_werewolf_count(game_manager_t game_manager)
     VALIDATE_GAME_MANAGER_INT(game_manager);
     return game_manager->roles[ROLE_WEREWOLF].total_count;
 }
+
+int
+game_manager_get_werewolf_alive_count(game_manager_t game_manager)
+{
+    VALIDATE_GAME_MANAGER_INT(game_manager);
+    return game_manager->roles[ROLE_WEREWOLF].alive_count;
+}
+
+
 
 game_role_t
 game_manager_get_player_role(game_manager_t game_manager, int socket_id)
