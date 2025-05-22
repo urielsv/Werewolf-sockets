@@ -86,7 +86,7 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
                 send_message(client_socket, CHANNEL_WEREWOLF, buffer, sender_number);
                 break;
             }
-            char msg[BUFFER_SIZE] = "It is night time, you are not allowed to talk!\n";
+            char msg[BUFFER_SIZE] = "It is night time, you are not allowed to talk!";
             snprintf(formatted, BUFFER_SIZE, "%s", format_server_message(msg));
             send_message(client_socket, CHANNEL_SERVER, formatted, sender_number);
             break;
