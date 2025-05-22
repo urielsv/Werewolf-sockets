@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <errno.h>
 #include "logger.h"
 #include "defs.h"

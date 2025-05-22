@@ -60,16 +60,12 @@ get_game_config(int player_count)
     for (size_t i = 0; i < NUM_CONFIGS; i++) {
         if (player_count >= GAME_CONFIGS[i].min_players && 
             player_count <= GAME_CONFIGS[i].max_players) {
+            log(INFO, "Game config found: %ld", i);
             return &GAME_CONFIGS[i];
         }
     }
     return NULL;
 }
 
-static inline bool
-is_valid_player_count(int player_count)
-{
-    return get_game_config(player_count) != NULL;
-}
 
 #endif // __game_config_h__ 

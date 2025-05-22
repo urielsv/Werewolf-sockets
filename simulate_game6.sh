@@ -22,14 +22,13 @@ tmux select-pane -t 3
 
 tmux split-window -v -t 3
 
-tmux send-keys -t werewolf:0.0 "cd build/server && ./werewolf_server 8080 6" C-m
+tmux send-keys -t werewolf:0.0 "cd build/server && ./werewolf_server 8081 6" C-m
 
 # Wait for server to start
-sleep 2
+sleep 1
 
 for i in {1..6}; do
-    tmux send-keys -t werewolf:0.$i "cd build/client && ./werewolf_client 127.0.0.1 8080" C-m
-    sleep 0.5
+  tmux send-keys -t werewolf:0.$i "cd build/client && ./werewolf_client 127.0.0.1 8081" C-m
 done
 
 tmux attach-session -t werewolf

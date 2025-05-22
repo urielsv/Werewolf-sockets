@@ -13,7 +13,6 @@
 
 static char addr_buff[MAX_ADDR_BUFF];
 
-
 client_fd_list_t *
 add_client_fd(client_fd_list_t *client_fd_list, int client_socket)
 {
@@ -154,7 +153,7 @@ accept_tcp_connection(int server_socket)
 }
 
 int
-setup_tcp_server(const char *host, const char *service)
+setup_tcp_server(const char *host, const char *service, int max_backlog)
 {
     if (validate_server_input(host, service) < 0) {
         return RET_ERROR;
@@ -193,7 +192,7 @@ setup_tcp_server(const char *host, const char *service)
             continue;
         }
 
-        if (listen(sockfd, MAX_BACKLOG) < 0) {
+        if (listen(sockfd, max_backlog) < 0) {
             log(WARN, "listen() failed: %s", strerror(errno));
             close(sockfd);
             continue;

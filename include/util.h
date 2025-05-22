@@ -10,6 +10,7 @@
 #define INET6_ADDRSTRLEN 46
 #define MAX_ADDR_LEN INET6_ADDRSTRLEN
 #define MAX_TIMEOUT 30
+
 /* Function declarations */
 const char *print_family(struct addrinfo *aip);
 const char *print_type(struct addrinfo *aip);

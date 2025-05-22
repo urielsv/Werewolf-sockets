@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <sys/sockfdet.h>
 #include <sys/select.h>
 #include "logger.h"
 #include "defs.h"
@@ -23,20 +22,20 @@ set_sockfdet_options(int sockfd)
     // We add SO_RCVLOWAT (Receive Low Watermark) to the sockfdet options.
     // This is to ensure that the sockfdet will not block when there is no data to read.
     int opt = 1;
-    if (setsockfdopt(sockfd, SOL_SOCKET, SO_RCVLOWAT, &opt, sizeof(opt)) < 0) {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVLOWAT, &opt, sizeof(opt)) < 0) {
         return -1;
     }
     return 0;
 }
 
-inline void
+static void
 print_welcome_message()
 {
     printf("Welcome to the Werewolf game!\n");
     printf("Type /help to see the list of available commands.\n");
 }
 
-inline void
+static void
 while_active(int sockfd) 
 {
     char buffer[BUFFER_SIZE] = {0};
@@ -51,7 +50,7 @@ while_active(int sockfd)
         tv.tv_sec = 0;
         tv.tv_usec = 0;
 
-        int max_fd = (sockfd > STDIN_FILENO) ? sock : STDIN_FILENO;
+        int max_fd = (sockfd > STDIN_FILENO) ? sockfd : STDIN_FILENO;
         
         int activity = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
         if (activity < 0) {
@@ -113,7 +112,7 @@ int main(int argc, const char *argv[])
         log(FATAL, "Failed to connect to server");
     }
 
-    if (set_sockfdet_options(sock) < 0) {
+    if (set_sockfdet_options(sockfd) < 0) {
         log(ERROR, "Failed to set sockfdet options: %s", strerror(errno));
         close(sockfd);
         return 1;

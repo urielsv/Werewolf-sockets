@@ -24,7 +24,8 @@
 
 static channel_subscription_t chat_channel = {CHANNEL_CHAT, {0}, 0};
 static channel_subscription_t werewolf_channel = {CHANNEL_WEREWOLF, {0}, 0};
-static channel_subscription_t dead_channel = {CHANNEL_DEAD, {0}, 0};
+static channel_subscription_t announcement_channel = {CHANNEL_ANNOUNCEMENT, {0}, 0};
+static channel_subscription_t server_channel = {CHANNEL_SERVER, {0}, 0};
 
 void
 handle_client_data(int client_socket, game_manager_t game_manager, client_fd_list_t **client_fd_list)
@@ -44,7 +45,8 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
         
         unsubscribe_from_channel(&chat_channel, client_socket);
         unsubscribe_from_channel(&werewolf_channel, client_socket);
-        unsubscribe_from_channel(&dead_channel, client_socket);
+        unsubscribe_from_channel(&announcement_channel, client_socket);
+        unsubscribe_from_channel(&server_channel, client_socket);
         return;
     }
 
@@ -70,16 +72,35 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
     }
 
     char formatted[BUFFER_SIZE];
-    snprintf(formatted, BUFFER_SIZE, "%s", format_message(CHANNEL_CHAT, sender_number, buffer));
+    // Handle it better
+    switch (game_manager_get_phase(game_manager)) {
+        case GAME_STATE_DAY:
+            log(INFO, "Sending message to chat channel");
+            snprintf(formatted, BUFFER_SIZE, "%s", format_message(CHANNEL_CHAT, sender_number, buffer));
+            forward_message(&chat_channel, formatted);
+            break;
+        case GAME_STATE_NIGHT:
+            log(INFO, "Sending message to werewolf channel");
+            snprintf(formatted, BUFFER_SIZE, "%s", format_message(CHANNEL_CHAT, sender_number, buffer));
+            if (game_manager_is_player_werewolf(game_manager, client_socket)) {
+                send_message(client_socket, CHANNEL_WEREWOLF, buffer, sender_number);
+                break;
+            }
+            char msg[BUFFER_SIZE] = "It is night time, you are not allowed to talk!\n";
+            snprintf(formatted, BUFFER_SIZE, "%s", format_server_message(msg));
+            send_message(client_socket, CHANNEL_SERVER, formatted, sender_number);
+            break;
+        // TODO: Add voting and ended phases
+        case GAME_STATE_VOTING:
+        case GAME_STATE_ENDED:
+        default:
 
-    if (!game_manager_is_player_alive(game_manager, client_socket)) {
-        forward_message(&dead_channel, formatted);
-    } else {
-        forward_message(&chat_channel, formatted);
+            break;
     }
+
 }
 
-inline void 
+static void 
 print_usage(const char *program_name) 
 {
     fprintf(stderr, "Usage: %s [port] [max_players]\n", program_name);
@@ -92,7 +113,7 @@ static void
 handle_new_connection(int client_socket, game_manager_t game_manager, 
                        client_fd_list_t **client_fd_list, int max_players) 
 {
-    if (game_manager_get_player_count(game_manager) >= max_players) {
+    if (game_manager_get_player_count(game_manager) > max_players) {
         log(WARN, "Maximum players reached, rejecting connection");
         close(client_socket);
         return;
@@ -103,6 +124,10 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
         send_message(client_socket, CHANNEL_ANNOUNCEMENT, 
                     "The game has already started, come back later!", 
                         game_manager_get_player_number(game_manager, client_socket));
+        unsubscribe_from_channel(&announcement_channel, client_socket);
+        unsubscribe_from_channel(&server_channel, client_socket);
+        unsubscribe_from_channel(&chat_channel, client_socket);
+        unsubscribe_from_channel(&werewolf_channel, client_socket);
         close(client_socket);
         return;
     }
@@ -113,30 +138,34 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
             game_manager_get_player_count(game_manager));
         
         subscribe_to_channel(&chat_channel, client_socket);
-        
+        subscribe_to_channel(&announcement_channel, client_socket);
+        subscribe_to_channel(&server_channel, client_socket);
         int player_count = game_manager_get_player_count(game_manager);
-        if (is_valid_player_count(player_count)) {
-            log(INFO, "Enough players to start game (%d players)", player_count);
+        if (player_count == max_players) {
+            log(INFO, "Enough players to start game (%d players), starting game...", player_count);
             game_manager_start_game(game_manager);
             
             // Get player sockets and roles for notification
             int *player_sockets = game_manager_get_players_sockets(game_manager);
             game_role_t *player_roles = malloc(sizeof(game_role_t) * player_count);
-            
+
             for (int i = 0; i < player_count; i++) {
                 player_roles[i] = game_manager_get_player_role(game_manager, player_sockets[i]);
-                
                 if (player_roles[i] == ROLE_WEREWOLF) {
                     subscribe_to_channel(&werewolf_channel, player_sockets[i]);
                 }
             }
-            
-            broadcast_message(CHANNEL_ANNOUNCEMENT, "The game has started!");
-            
+
+            // char formatted[BUFFER_SIZE];
+            // char *msg = "The game has started!";
+            // char *announcement = format_message(CHANNEL_ANNOUNCEMENT, 0, msg);
+            // strncpy(formatted, announcement, BUFFER_SIZE - 1);
+            // formatted[BUFFER_SIZE - 1] = '\0'; 
+            // forward_message(&announcement_channel, formatted);
             int werewolf_count = game_manager_get_werewolf_count(game_manager);
             for (int i = 0; i < player_count; i++) {
                 char role_message[BUFFER_SIZE];
-                char *role_name = role_by_name(player_roles[i]);
+                const char *role_name = role_by_name(player_roles[i]);
                 snprintf(role_message, BUFFER_SIZE, "You are a %s!", role_name);
                 send_message(player_sockets[i], CHANNEL_ANNOUNCEMENT, role_message, game_manager_get_player_number(game_manager, player_sockets[i]));
                 
@@ -195,13 +224,13 @@ main(int argc, const char *argv[])
     close(STDIN_FILENO);
     const char *port = DEFAULT_PORT;
     int max_players = DEFAULT_MAX_PLAYERS;
-
     if (argc > 1) {
         port = argv[1];
     }
+
     if (argc > 2) {
         max_players = atoi(argv[2]);
-        if (!is_valid_player_count(max_players)) {
+        if (max_players < 6 || max_players > 16) {
             fprintf(stderr, "Error: Invalid max_players value. Must be between 6 and 16.\n");
             print_usage(argv[0]);
             return 1;
@@ -214,7 +243,7 @@ main(int argc, const char *argv[])
         return 1;
     }
 
-    int server_socket = setup_tcp_server("0.0.0.0", port);
+    int server_socket = setup_tcp_server("0.0.0.0", port, max_players);
     if (server_socket < 0) {
         log(ERROR, "Failed to setup server");
         game_manager_destroy(game_manager);

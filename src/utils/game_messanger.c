@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "logger.h"
 #include "game_messanger.h"
+#include "defs.h"
 
 const char *
 channel_name(message_channel_t channel)
@@ -13,9 +14,9 @@ channel_name(message_channel_t channel)
         case CHANNEL_ANNOUNCEMENT: return "ANNOUNCEMENT";
         case CHANNEL_CHAT: return "CHAT";
         case CHANNEL_WEREWOLF: return "WEREWOLF";
-        case CHANNEL_DEAD: return "DEAD";
         case CHANNEL_WHISPER: return "WHISPER";
-        default: return "UNKNOWN";
+        case CHANNEL_SERVER: return "SERVER";
+        default: return "?";
     }
 }
 
@@ -24,7 +25,7 @@ const char *get_channel_color(message_channel_t channel)
     switch (channel) {
         case CHANNEL_ANNOUNCEMENT: return "\033[1;33m";  // Yellow
         case CHANNEL_WEREWOLF: return "\033[1;31m";      // Red
-        case CHANNEL_DEAD: return "\033[1;30m";          // Gray
+        case CHANNEL_SERVER: return "\033[1;33m";          // Yellow
         case CHANNEL_WHISPER: return "\033[1;35m";       // Magenta
         case CHANNEL_CHAT: return "\033[1;32m";          // Green
         default: return "\033[0m";                       // Reset
@@ -49,10 +50,18 @@ parse_message_channel(const char *message)
     if (strcmp(channel, "ANNOUNCEMENT") == 0) return CHANNEL_ANNOUNCEMENT;
     if (strcmp(channel, "CHAT") == 0) return CHANNEL_CHAT;
     if (strcmp(channel, "WEREWOLF") == 0) return CHANNEL_WEREWOLF;
-    if (strcmp(channel, "DEAD") == 0) return CHANNEL_DEAD;
+    if (strcmp(channel, "SERVER") == 0) return CHANNEL_SERVER;
     if (strcmp(channel, "WHISPER") == 0) return CHANNEL_WHISPER;
 
     return CHANNEL_COUNT;
+}
+
+char *
+format_server_message(const char *message)
+{
+    static char formatted[BUFFER_SIZE];
+    snprintf(formatted, BUFFER_SIZE, "[SERVER] %s\n", message);
+    return formatted;
 }
 
 char *
@@ -74,7 +83,7 @@ format_whisper_message(int from_id, int to_id, const char *message)
     return formatted;
 }
 
-inline int
+int
 read_and_format_message(int socket_id, char *buffer, size_t buffer_size)
 {
     if (socket_id < 0 || !buffer || buffer_size == 0) {
@@ -110,7 +119,7 @@ send_message(int socket_id, message_channel_t channel, const char *message, int 
     }
 
     char *formatted = format_message(channel, player_number, message);
-    int rv = send(socket_id, formatted, strlen(formatted), 0);
+    int rv = send(socket_id, formatted, strlen(formatted) + 1, 0);
     if (rv < 0) {
         log(ERROR, "Failed to send message to socket %d", socket_id);
         return -1;
@@ -145,22 +154,6 @@ send_whisper(int from_socket_id, int to_socket_id, int from_player_number, int t
     return rv;
 }
 
-int 
-broadcast_message(message_channel_t channel, const char *message) 
-{
-    if (!message) {
-        log(ERROR, "Invalid message for broadcast");
-        return -1;
-    }
-
-    char *formatted = format_message(channel, 0, message); 
-    int rv = send(0, formatted, strlen(formatted), 0); 
-    if (rv < 0) {
-        log(ERROR, "Failed to broadcast message");
-        return -1;
-    }
-    return rv;
-}
 
 int 
 forward_message(channel_subscription_t *subscription, const char *message) 
