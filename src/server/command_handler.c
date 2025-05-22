@@ -10,12 +10,12 @@
 
 
 // Function declarations
-static void handle_whisper_command(const char *buffer, int client_socket, 
+static void handle_whisper_command(const char *buffer, int client_socket,
                                  game_manager_t game_manager);
-static void handle_werewolf_command(const char *buffer, int client_socket, 
+static void handle_werewolf_command(const char *buffer, int client_socket,
                                   game_manager_t game_manager);
 
-int handle_if_command(const char *buffer, int client_socket, game_manager_t game_manager) 
+int handle_if_command(const char *buffer, int client_socket, game_manager_t game_manager)
 {
     if (!buffer || !game_manager) {
         log(ERROR, "Invalid parameters in handle_if_command");
@@ -29,7 +29,7 @@ int handle_if_command(const char *buffer, int client_socket, game_manager_t game
         handle_whisper_command(buffer, client_socket, game_manager);
         return RET_SUCCESS;
     }
-    
+
     if (strncmp(buffer, WEREWOLF_CMD, strlen(WEREWOLF_CMD)) == 0) {
         handle_werewolf_command(buffer, client_socket, game_manager);
         return RET_SUCCESS;
@@ -38,8 +38,8 @@ int handle_if_command(const char *buffer, int client_socket, game_manager_t game
     return RET_ERROR;
 }
 
-static void handle_whisper_command(const char *buffer, int client_socket, 
-                                 game_manager_t game_manager) 
+static void handle_whisper_command(const char *buffer, int client_socket,
+                                 game_manager_t game_manager)
 {
     if (!buffer || !game_manager) {
         log(ERROR, "Invalid parameters in handle_whisper_command");
@@ -60,13 +60,18 @@ static void handle_whisper_command(const char *buffer, int client_socket,
 
     if (player_id_str && message) {
         int target_player_number = atoi(player_id_str);
-        int to_socketfd = game_manager_get_socket_by_player_number(game_manager, 
+        int to_socketfd = game_manager_get_socket_by_player_number(game_manager,
                                                                  target_player_number);
         int from_player_number = game_manager_get_player_number(game_manager, client_socket);
-        
+
         if (to_socketfd > 0 && client_socket > 0) {
-            send_whisper(client_socket, to_socketfd, from_player_number, 
-                        target_player_number, message);
+            message_t whisper_msg = {
+                .channel = CHANNEL_WHISPER,
+                .content = message,
+                .sender_id = from_player_number,
+                .receiver_id = target_player_number
+            };
+            send2client(&whisper_msg, to_socketfd);
         } else {
             log(ERROR, "Invalid socket or player numbers in whisper command");
         }
@@ -77,8 +82,8 @@ static void handle_whisper_command(const char *buffer, int client_socket,
     free(command_copy);
 }
 
-static void handle_werewolf_command(const char *buffer, int client_socket, 
-                                  game_manager_t game_manager) 
+static void handle_werewolf_command(const char *buffer, int client_socket,
+                                  game_manager_t game_manager)
 {
     // TODO: Implement werewolf command handling
     log(INFO, "Werewolf command not yet implemented");

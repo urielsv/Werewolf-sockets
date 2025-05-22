@@ -2,9 +2,10 @@
 #define GAME_MESSANGER_H
 
 #include <stdbool.h>
-#include "game_manager.h"
+#include <stdio.h>
 #include "defs.h"
 
+#define CHANNEL_MAX_LEN 16
 typedef enum {
     CHANNEL_ANNOUNCEMENT,    // Server announcements
     CHANNEL_CHAT,           // General chat
@@ -16,7 +17,7 @@ typedef enum {
 
 typedef struct {
     int subscription_count;
-    int socket_ids[MAX_SUBSCRIPTIONS];
+    int socket_fds[MAX_SUBSCRIPTIONS];
     message_channel_t channel;
 } channel_subscription_t;
 
@@ -25,7 +26,6 @@ typedef struct message {
     int sender_id;        // -1 for system messages
     int receiver_id;      // -1 for broadcast messages
     const char *content;
-    bool is_system;       // true for system/server messages
 } message_t;
 
 // Message formatting and parsing
@@ -36,9 +36,7 @@ char *format_message(const message_t *msg);
 int read_and_format_message(int socket_id, char *buffer, size_t buffer_size);
 
 // Message sending functions
-int send_game_message(const message_t *msg, int socket_id);
-int send_message(int socket_id, message_channel_t channel, const char *message, int player_number);
-int send_whisper(int from_socket_id, int to_socket_id, int from_player_number, int to_player_number, const char *message);
+int send2client(const message_t *msg, int socket_id);
 int forward_message(channel_subscription_t *subscription, const char *message);
 
 // Channel management
@@ -46,4 +44,4 @@ int subscribe_to_channel(channel_subscription_t *subscription, int socket_id);
 int unsubscribe_from_channel(channel_subscription_t *subscription, int socket_id);
 bool is_subscribed(channel_subscription_t *subscription, int socket_id);
 
-#endif // GAME_MESSANGER_H 
+#endif // GAME_MESSANGER_H

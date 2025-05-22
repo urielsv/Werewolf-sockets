@@ -1,7 +1,7 @@
 #ifndef __command_dispatcher_h__
 #define __command_dispatcher_h__
 
-#define COMMAND_ALIAS_MAX 16
+#define COMMAND_ALIAS_MAX 5
 
 typedef struct {
     const char *aliases[COMMAND_ALIAS_MAX];

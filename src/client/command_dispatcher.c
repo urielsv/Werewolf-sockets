@@ -13,7 +13,7 @@
 
 static command_t commands[] = {
     [0] = {
-        .aliases = {"help"},
+        .aliases = {"help", NULL},
         .usage = "/help",
         .description = "Show this help message",
         .function = help_command,
@@ -21,7 +21,7 @@ static command_t commands[] = {
         .arg2 = NULL
     },
     [1] = {
-        .aliases = {"whisper", "w", "pm", "msg"},
+        .aliases = {"whisper", "w", "pm", "msg", NULL},
         .usage = "/whisper <player_id> <message>",
         .description = "Send a private message to a player",
         .function = whisper_command,
@@ -29,7 +29,7 @@ static command_t commands[] = {
         .arg2 = NULL
     },
     [2] = {
-        .aliases = {"ww", "werewolf"},
+        .aliases = {"ww", "werewolf", NULL},
         .usage = "/ww <player_id>",
         .description = "Vote for a player to be a werewolf",
         .function = ww_command,
@@ -39,7 +39,7 @@ static command_t commands[] = {
 };
 
 void
-dispatch_command(const char *command, int sockfd, void *arg1, void *arg2) 
+dispatch_command(const char *command, int sockfd, void *arg1, void *arg2)
 {
     if (!command) {
         printf("Usage: /help\n");
@@ -48,8 +48,7 @@ dispatch_command(const char *command, int sockfd, void *arg1, void *arg2)
 
     int command_count = sizeof(commands) / sizeof(commands[0]);
     for (int i = 0; i < command_count; i++) {
-        int alias_count = sizeof(commands[i].aliases) / sizeof(commands[i].aliases[0]);
-        for (int j = 0; j < alias_count; j++) {
+        for (int j = 0; j < COMMAND_ALIAS_MAX && commands[i].aliases[j] != NULL; j++) {
             if (strcmp(command, commands[i].aliases[j]) == 0) {
                 commands[i].function(sockfd, arg1, arg2);
                 return;
@@ -59,20 +58,20 @@ dispatch_command(const char *command, int sockfd, void *arg1, void *arg2)
     printf("Unknown command: %s\n", command);
 }
 
-void 
-whisper_command(int sockfd, void *player_id_str, void *message) 
+void
+whisper_command(int sockfd, void *player_id_str, void *message)
 {
     if (!player_id_str || !message) {
         printf("Usage: %s\n", commands[1].usage);
         return;
     }
-    
+
     int player_id = atoi(player_id_str);
     if (player_id <= 0) {
         printf("Invalid player ID\n");
         return;
     }
-    
+
     char whisper_cmd[BUFFER_SIZE];
     snprintf(whisper_cmd, BUFFER_SIZE, "/whisper %d %s", player_id, (char *)message);
     if (send(sockfd, whisper_cmd, strlen(whisper_cmd), 0) < 0) {
@@ -81,18 +80,23 @@ whisper_command(int sockfd, void *player_id_str, void *message)
 
 }
 
-void 
-help_command(int sockfd, void *arg1, void *arg2) 
+void
+help_command(int sockfd, void *arg1, void *arg2)
 {
     printf("Available commands:\n");
     int command_count = sizeof(commands) / sizeof(commands[0]);
     for (int i = 0; i < command_count; i++) {
         printf("  %s - %s\n", commands[i].usage, commands[i].description);
+        printf("    Aliases: ");
+        for (int j = 0; j < COMMAND_ALIAS_MAX & commands[i].aliases[j] != NULL; j++) {
+            printf("%s%s", j > 0 ? ", " : "", commands[i].aliases[j]);
+        }
+        printf("\n");
     }
 }
 
-void 
-ww_command(int sockfd, void *arg1, void *arg2) 
+void
+ww_command(int sockfd, void *arg1, void *arg2)
 {
     // TODO: Implement ww chat
 }

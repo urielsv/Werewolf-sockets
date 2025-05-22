@@ -54,3 +54,7 @@ dkms.conf
 # Build files
 build/
 
+# Other
+.clang*
+.cache/
+compile_commands.json

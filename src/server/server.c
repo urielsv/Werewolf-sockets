@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,15 +6,12 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include <errno.h>
 #include <sys/select.h>
 #include <fcntl.h>
 
 #include "tcp_server_util.h"
 #include "logger.h"
-#include "defs.h"
 #include "game_manager.h"
-#include "game_config.h"
 #include "game_messanger.h"
 #include "game_util.h"
 #include "command_handler.h"
@@ -32,7 +30,7 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
 {
     char buffer[BUFFER_SIZE] = {0};
     int valread = read(client_socket, buffer, BUFFER_SIZE - 1);
-    
+
     if (valread <= 0) {
         if (valread < 0) {
             log(ERROR, "Read failed from client %d: %s", client_socket, strerror(errno));
@@ -76,25 +74,23 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
         .sender_id = sender_number,
         .receiver_id = -1,  // broadcast
         .content = buffer,
-        .is_system = false
     };
 
     switch (game_manager_get_phase(game_manager)) {
         case GAME_STATE_DAY:
             forward_message(&chat_channel, format_message(&msg));
             break;
-        
+
         case GAME_STATE_NIGHT:
             if (game_manager_is_player_werewolf(game_manager, client_socket)) {
                 msg.channel = CHANNEL_WEREWOLF;
-                send_game_message(&msg, client_socket);
+                send2client(&msg, client_socket);
             } else {
                 message_t error_msg = {
                     .channel = CHANNEL_SERVER,
                     .content = "It is night time, you are not allowed to talk!",
-                    .is_system = true
                 };
-                send_game_message(&error_msg, client_socket);
+                send2client(&error_msg, client_socket);
             }
             break;
         // TODO: Add voting and ended phases
@@ -106,8 +102,8 @@ handle_client_data(int client_socket, game_manager_t game_manager, client_fd_lis
 
 }
 
-static void 
-print_usage(const char *program_name) 
+static void
+print_usage(const char *program_name)
 {
     fprintf(stderr, "Usage: %s [port] [max_players]\n", program_name);
     fprintf(stderr, "  port: Port number to listen on (default: %s)\n", DEFAULT_PORT);
@@ -115,9 +111,9 @@ print_usage(const char *program_name)
     fprintf(stderr, "  Note: max_players must be between 6 and 16\n");
 }
 
-static void 
-handle_new_connection(int client_socket, game_manager_t game_manager, 
-                       client_fd_list_t **client_fd_list, int max_players) 
+static void
+handle_new_connection(int client_socket, game_manager_t game_manager,
+                       client_fd_list_t **client_fd_list, int max_players)
 {
     if (game_manager_get_player_count(game_manager) > max_players) {
         log(WARN, "Maximum players reached, rejecting connection");
@@ -127,8 +123,11 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
 
     if (game_manager_get_phase(game_manager) != GAME_STATE_LOBBY) {
         log(INFO, "Game is not in lobby phase, rejecting connection");
-        send_message(client_socket, CHANNEL_ANNOUNCEMENT, 
-                    "The game has already started, come back later!", -1);
+        message_t msg = {
+            .content = "The game has already started, come back later!",
+            .channel = CHANNEL_SERVER
+        };
+        send2client(&msg, client_socket);
         unsubscribe_from_channel(&announcement_channel, client_socket);
         unsubscribe_from_channel(&server_channel, client_socket);
         unsubscribe_from_channel(&chat_channel, client_socket);
@@ -139,9 +138,9 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
 
     if (game_manager_add_player(game_manager, client_socket) == 0) {
         *client_fd_list = add_client_fd(*client_fd_list, client_socket);
-        log(INFO, "New client added to list, total clients: %d", 
+        log(INFO, "New client added to list, total clients: %d",
             game_manager_get_player_count(game_manager));
-        
+
         subscribe_to_channel(&chat_channel, client_socket);
         subscribe_to_channel(&announcement_channel, client_socket);
         subscribe_to_channel(&server_channel, client_socket);
@@ -149,7 +148,7 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
         if (player_count == max_players) {
             log(INFO, "Enough players to start game (%d players), starting game...", player_count);
             game_manager_start_game(game_manager);
-            
+
             // Get player sockets and roles for notification
             int *player_sockets = game_manager_get_players_sockets(game_manager);
             game_role_t *player_roles = malloc(sizeof(game_role_t) * player_count);
@@ -161,12 +160,7 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
                 }
             }
 
-            message_t game_start_msg = {
-                .channel = CHANNEL_ANNOUNCEMENT,
-                .content = "The game has started! It is now night time.",
-                .is_system = true
-            };
-            forward_message(&announcement_channel, format_message(&game_start_msg));
+            forward_message(&announcement_channel, "The game has started! It is now night time.");
             int werewolf_count = game_manager_get_werewolf_count(game_manager);
             for (int i = 0; i < player_count; i++) {
                 char role_message[BUFFER_SIZE];
@@ -175,10 +169,9 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
                 message_t role_msg = {
                     .channel = CHANNEL_SERVER,
                     .content = role_message,
-                    .is_system = true
                 };
-                send_game_message(&role_msg, player_sockets[i]);
-                
+                send2client(&role_msg, player_sockets[i]);
+
                 if (player_roles[i] == ROLE_WEREWOLF && werewolf_count-1 > 0) {
                     char team_message[BUFFER_SIZE] = "Your werewolf teammates are: ";
                     for (int j = 0; j < player_count; j++) {
@@ -192,12 +185,11 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
                     message_t team_msg = {
                         .channel = CHANNEL_ANNOUNCEMENT,
                         .content = team_message,
-                        .is_system = true
                     };
-                    send_game_message(&team_msg, player_sockets[i]);
+                    send2client(&team_msg, player_sockets[i]);
                 }
             }
-            
+
             free(player_sockets);
             free(player_roles);
         }
@@ -207,9 +199,9 @@ handle_new_connection(int client_socket, game_manager_t game_manager,
     }
 }
 
-static void 
-setup_fd_sets(int server_socket, client_fd_list_t *client_fd_list, 
-                         fd_set *read_fds, int *max_fd, game_manager_t game_manager) 
+static void
+setup_fd_sets(int server_socket, client_fd_list_t *client_fd_list,
+                         fd_set *read_fds, int *max_fd, game_manager_t game_manager)
 {
     FD_ZERO(read_fds);
     FD_SET(server_socket, read_fds);
@@ -233,8 +225,8 @@ setup_fd_sets(int server_socket, client_fd_list_t *client_fd_list,
     }
 }
 
-int 
-main(int argc, const char *argv[]) 
+int
+main(int argc, const char *argv[])
 {
     close(STDIN_FILENO);
     const char *port = DEFAULT_PORT;
@@ -310,7 +302,7 @@ main(int argc, const char *argv[])
             }
             current = next;
         }
-        
+
 
     }
 
@@ -325,4 +317,3 @@ main(int argc, const char *argv[])
     close(server_socket);
     return 0;
 }
-

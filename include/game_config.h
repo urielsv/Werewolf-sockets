@@ -3,14 +3,15 @@
 
 #include <stdbool.h>
 #include "game_manager.h"
+#include "logger.h"
 
 typedef struct {
     int min_players;
     int max_players;
-    int num_werewolves;      
-    int num_villagers;       
-    int num_special_roles;   
-    game_role_t special_roles[GAME_ROLE_COUNT]; 
+    int num_werewolves;
+    int num_villagers;
+    int num_special_roles;
+    game_role_t special_roles[GAME_ROLE_COUNT];
 } game_config_t;
 
 static const game_config_t GAME_CONFIGS[] = {
@@ -58,7 +59,7 @@ static inline const game_config_t*
 get_game_config(int player_count)
 {
     for (size_t i = 0; i < NUM_CONFIGS; i++) {
-        if (player_count >= GAME_CONFIGS[i].min_players && 
+        if (player_count >= GAME_CONFIGS[i].min_players &&
             player_count <= GAME_CONFIGS[i].max_players) {
             log(INFO, "Game config found: %ld", i);
             return &GAME_CONFIGS[i];
@@ -68,4 +69,4 @@ get_game_config(int player_count)
 }
 
 
-#endif // __game_config_h__ 
+#endif // __game_config_h__
